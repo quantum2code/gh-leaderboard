@@ -1,7 +1,5 @@
 # gh-leaderboard
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Self, TRPC, and more.
-
 ## Features
 
 - **TypeScript** - For type safety and improved developer experience
@@ -47,44 +45,30 @@ pnpm run dev
 
 Open [http://localhost:3001](http://localhost:3001) in your browser to see the fullstack application.
 
-## UI Customization
-
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
-
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
-
-### Add more shared components
-
-Run this from the project root to add more primitives to the shared UI package:
+Uses ngrok reverse proxy for dev testing of webhooks
 
 ```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
+npx ngrok http 3001
 ```
-
-Import shared components like this:
-
-```tsx
-import { Button } from "@gh-leaderboard/ui/components/button";
-```
-
-### Add app-specific blocks
-
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
 
 ## Project Structure
 
 ```
 gh-leaderboard/
 ├── apps/
-│   └── web/         # Fullstack application (Next.js)
+│   └── web/               # Fullstack application (Next.js)
 ├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── api/         # API layer / business logic
-│   ├── auth/        # Authentication configuration & logic
-│   └── db/          # Database schema & queries
+│   ├── ui/                # Shared shadcn/ui components and styles
+│   ├── api/               # API layer / business logic
+|       └── webhook/github # github webhook
+│   ├── auth/              # Authentication configuration & logic
+│   └── db/                # Database schema & queries
 ```
+In `.env` you need to provide:
+
+`GITHUB_WEBHOOK_SECRET`
+`GITHUB_REPO_OWNER`
+`GITHUB_REPO_NAME`
 
 ## Available Scripts
 
