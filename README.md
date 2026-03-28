@@ -67,8 +67,8 @@ gh-leaderboard/
 In `.env` you need to provide:
 
 `GITHUB_WEBHOOK_SECRET`
-`GITHUB_REPO_OWNER`
-`GITHUB_REPO_NAME`
+`INNGEST_EVENT_KEY`
+`INNGEST_SIGNING_KEY`
 
 ## Available Scripts
 

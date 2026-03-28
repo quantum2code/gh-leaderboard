@@ -16,8 +16,9 @@
     "@gh-leaderboard/env": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
-    "drizzle-orm": "^0.45.1",
     "dotenv": "catalog:",
+    "drizzle-orm": "^0.45.1",
+    "inngest": "^4.1.0",
     "next": "catalog:",
     "zod": "catalog:"
   },

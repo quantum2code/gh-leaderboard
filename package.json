@@ -11,6 +11,7 @@
     "build": "pnpm -r build",
     "check-types": "pnpm -r check-types",
     "dev:web": "pnpm --filter web dev",
+    "dev:inngest": "npx inngest-cli@1.17.5 dev -u http://127.0.0.1:3001/api/inngest",
     "db:push": "pnpm --filter @gh-leaderboard/db db:push",
     "db:studio": "pnpm --filter @gh-leaderboard/db db:studio",
     "db:generate": "pnpm --filter @gh-leaderboard/db db:generate",
