@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { trpc } from "@/utils/trpc";
+import InputTitle from "@/components/InputTitle";
 
 function formatLastCommit(timestamp: number) {
   return new Intl.DateTimeFormat("en", {
@@ -28,6 +29,12 @@ export default function Home() {
           Incoming GitHub push webhooks are filtered to the configured owner and
           repo, then grouped into a leaderboard by contributor.
         </p>
+      </section>
+      <section className="text-3xl font-medium text-foreground/80">
+        Show me, contributions of
+        <InputTitle />
+        in repo
+        <InputTitle />
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
