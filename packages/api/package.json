@@ -1,0 +1,27 @@
+{
+  "name": "@gh-leaderboard/api",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@gh-leaderboard/auth": "workspace:*",
+    "@gh-leaderboard/db": "workspace:*",
+    "@gh-leaderboard/env": "workspace:*",
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
+    "dotenv": "catalog:",
+    "next": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@gh-leaderboard/config": "workspace:*",
+    "typescript": "^5"
+  }
+}

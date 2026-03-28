@@ -1,0 +1,24 @@
+{
+  "name": "@gh-leaderboard/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@gh-leaderboard/db": "workspace:*",
+    "@gh-leaderboard/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@gh-leaderboard/config": "workspace:*",
+    "typescript": "^5"
+  }
+}
