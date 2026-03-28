@@ -18,13 +18,15 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8">
       <section className="rounded-3xl border bg-gradient-to-br from-neutral-950 to-neutral-800 p-8 text-white">
-        <p className="text-sm uppercase tracking-[0.25em] text-white/65">GitHub Commit Leaderboard</p>
+        <p className="text-sm uppercase tracking-[0.25em] text-white/65">
+          GitHub Commit Leaderboard
+        </p>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-          Track commits for one repository in real time.
+          Git gud Leaderboard
         </h1>
         <p className="mt-4 max-w-2xl text-sm text-white/75">
-          Incoming GitHub push webhooks are filtered to the configured owner and repo, then grouped
-          into a leaderboard by contributor.
+          Incoming GitHub push webhooks are filtered to the configured owner and
+          repo, then grouped into a leaderboard by contributor.
         </p>
       </section>
 
@@ -53,12 +55,15 @@ export default function Home() {
                 {leaderboard.data.repoOwner}/{leaderboard.data.repoName}
               </p>
               <p className="text-muted-foreground">
-                {leaderboard.data.totalCommits} commits recorded for this leaderboard
+                {leaderboard.data.totalCommits} commits recorded for this
+                leaderboard
               </p>
             </div>
           ) : (
             <p className="mt-4 text-sm text-muted-foreground">
-              {leaderboard.isLoading ? "Loading repository info..." : "No repository data yet."}
+              {leaderboard.isLoading
+                ? "Loading repository info..."
+                : "No repository data yet."}
             </p>
           )}
         </section>
@@ -75,7 +80,9 @@ export default function Home() {
         </div>
 
         {leaderboard.isLoading ? (
-          <p className="mt-6 text-sm text-muted-foreground">Loading leaderboard...</p>
+          <p className="mt-6 text-sm text-muted-foreground">
+            Loading leaderboard...
+          </p>
         ) : leaderboard.data?.entries.length ? (
           <div className="mt-6 overflow-hidden rounded-2xl border">
             <table className="w-full border-collapse text-left text-sm">
@@ -90,8 +97,12 @@ export default function Home() {
               <tbody>
                 {leaderboard.data.entries.map((entry) => (
                   <tr key={entry.authorKey} className="border-t">
-                    <td className="px-4 py-3 font-mono text-muted-foreground">#{entry.rank}</td>
-                    <td className="px-4 py-3 font-medium">{entry.displayName}</td>
+                    <td className="px-4 py-3 font-mono text-muted-foreground">
+                      #{entry.rank}
+                    </td>
+                    <td className="px-4 py-3 font-medium">
+                      {entry.displayName}
+                    </td>
                     <td className="px-4 py-3">{entry.commitCount}</td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {formatLastCommit(entry.lastCommitAt)}
@@ -103,8 +114,8 @@ export default function Home() {
           </div>
         ) : (
           <p className="mt-6 text-sm text-muted-foreground">
-            No commits have been recorded yet. Send a push webhook for the configured repository to
-            populate the leaderboard.
+            No commits have been recorded yet. Send a push webhook for the
+            configured repository to populate the leaderboard.
           </p>
         )}
       </section>
