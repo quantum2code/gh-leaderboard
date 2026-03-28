@@ -5,6 +5,7 @@ import {
   ingestCommitsForRepository,
   normalizeWebhookCommits,
 } from "@gh-leaderboard/api/github-sync";
+import { getGitHubAdminAccessToken } from "@gh-leaderboard/api/github-admin";
 import { env } from "@gh-leaderboard/env/server";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -77,7 +78,12 @@ export async function POST(req: NextRequest) {
   }
 
   const normalizedCommits = normalizeWebhookCommits(payload);
-  const enrichedCommits = await enrichCommitsWithStats(repoName, normalizedCommits);
+  const githubAccessToken = await getGitHubAdminAccessToken();
+  const enrichedCommits = await enrichCommitsWithStats(
+    repoName,
+    normalizedCommits,
+    githubAccessToken,
+  );
 
   const result = await ingestCommitsForRepository({
     repository: trackedRepo,

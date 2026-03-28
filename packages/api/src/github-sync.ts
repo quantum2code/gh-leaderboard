@@ -2,6 +2,8 @@ import { db } from "@gh-leaderboard/db";
 import { and, eq, sql } from "@gh-leaderboard/db/drizzle";
 import { committers, commits, repositories } from "@gh-leaderboard/db/schema/github";
 
+import { fetchGitHub } from "./github-admin";
+
 export const REPO_SYNC_STATUS = {
   pending: "pending",
   backfilling: "backfilling",
@@ -69,32 +71,6 @@ type GitHubCommitDetailsResponse = {
   } | null;
 };
 
-function getGitHubHeaders() {
-  return {
-    Accept: "application/vnd.github+json",
-    "User-Agent": "gh-leaderboard-sync",
-  };
-}
-
-async function fetchGitHub<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`https://api.github.com${path}`, {
-    ...init,
-    headers: {
-      ...getGitHubHeaders(),
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-
-    throw new Error(`GitHub API request failed (${response.status}): ${body || response.statusText}`);
-  }
-
-  return (await response.json()) as T;
-}
-
 function getBranchName(ref: string | undefined) {
   if (!ref) {
     return "unknown";
@@ -151,8 +127,10 @@ export async function markRepositorySyncState(
   await db.update(repositories).set(updates).where(eq(repositories.id, repoId));
 }
 
-export async function fetchRepositoryMetadata(fullRepoName: string) {
-  const data = await fetchGitHub<GitHubRepoResponse>(`/repos/${fullRepoName}`);
+export async function fetchRepositoryMetadata(fullRepoName: string, accessToken?: string | null) {
+  const data = await fetchGitHub<GitHubRepoResponse>(`/repos/${fullRepoName}`, {
+    accessToken: accessToken ?? undefined,
+  });
 
   return {
     defaultBranch: data.default_branch ?? "main",
@@ -161,9 +139,12 @@ export async function fetchRepositoryMetadata(fullRepoName: string) {
   };
 }
 
-async function fetchCommitDetails(fullRepoName: string, sha: string) {
+async function fetchCommitDetails(fullRepoName: string, sha: string, accessToken?: string | null) {
   const data = await fetchGitHub<GitHubCommitDetailsResponse>(
     `/repos/${fullRepoName}/commits/${sha}`,
+    {
+      accessToken: accessToken ?? undefined,
+    },
   );
 
   return {
@@ -180,9 +161,17 @@ async function fetchCommitDetails(fullRepoName: string, sha: string) {
   };
 }
 
-export async function fetchRecentCommits(fullRepoName: string, branch: string, limit = 100) {
+export async function fetchRecentCommits(
+  fullRepoName: string,
+  branch: string,
+  limit = 100,
+  accessToken?: string | null,
+) {
   const data = await fetchGitHub<GitHubCommitListItem[]>(
     `/repos/${fullRepoName}/commits?sha=${encodeURIComponent(branch)}&per_page=${Math.min(limit, 100)}`,
+    {
+      accessToken: accessToken ?? undefined,
+    },
   );
 
   const baseCommits = data.filter(
@@ -192,7 +181,7 @@ export async function fetchRecentCommits(fullRepoName: string, branch: string, l
 
   const details = await Promise.all(
     baseCommits.map(async (commit) => {
-      const detail = await fetchCommitDetails(fullRepoName, commit.sha);
+      const detail = await fetchCommitDetails(fullRepoName, commit.sha, accessToken);
 
       return {
         sha: commit.sha,
@@ -326,10 +315,11 @@ export function normalizeWebhookCommits(payload: {
 export async function enrichCommitsWithStats(
   fullRepoName: string,
   commitsToEnrich: NormalizedCommit[],
+  accessToken?: string | null,
 ) {
   const details = await Promise.all(
     commitsToEnrich.map(async (commit) => {
-      const detail = await fetchCommitDetails(fullRepoName, commit.sha);
+      const detail = await fetchCommitDetails(fullRepoName, commit.sha, accessToken);
 
       return {
         ...commit,

@@ -29,6 +29,27 @@ export const repositories = sqliteTable(
   ],
 );
 
+export const githubAdminConnections = sqliteTable(
+  "github_admin_connection",
+  {
+    id: text("id").primaryKey(),
+    githubUserId: text("github_user_id"),
+    githubLogin: text("github_login"),
+    accessToken: text("access_token").notNull(),
+    tokenType: text("token_type"),
+    scope: text("scope"),
+    connectedByEmail: text("connected_by_email").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("github_admin_connection_login_idx").on(table.githubLogin)],
+);
+
 export const committers = sqliteTable(
   "committer",
   {
