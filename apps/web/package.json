@@ -12,6 +12,7 @@
     "@gh-leaderboard/auth": "workspace:*",
     "@gh-leaderboard/env": "workspace:*",
     "@gh-leaderboard/ui": "workspace:*",
+    "@gh-leaderboard/db": "workspace:*",
     "@libsql/client": "catalog:",
     "@tanstack/react-form": "^1.28.0",
     "@tanstack/react-query": "^5.90.12",

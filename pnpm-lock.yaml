@@ -87,6 +87,9 @@ importers:
       '@gh-leaderboard/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@gh-leaderboard/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@gh-leaderboard/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -190,6 +193,9 @@ importers:
       dotenv:
         specifier: 'catalog:'
         version: 17.3.1
+      drizzle-orm:
+        specifier: ^0.45.1
+        version: 0.45.2(@libsql/client@0.15.15)(kysely@0.28.14)
       next:
         specifier: 'catalog:'
         version: 16.2.1(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
