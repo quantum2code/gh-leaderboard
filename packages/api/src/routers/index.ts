@@ -6,8 +6,112 @@ import { committers, commits, repositories } from "@gh-leaderboard/db/schema/git
 import { z } from "zod";
 
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "../index";
+import {
+  getGitHubAdminConnection,
+  listGitHubRepositoriesForAdmin,
+} from "../github-admin";
 import { REPO_SYNC_STATUS, slugifyRepoName, splitRepoName } from "../github-sync";
 import { inngest as appInngest } from "../inngest";
+
+async function getAvailableSlug(baseValue: string) {
+  const baseSlug = slugifyRepoName(baseValue);
+
+  if (!baseSlug) {
+    throw new Error("A valid slug is required");
+  }
+
+  const existing = await db.query.repositories.findMany({
+    columns: {
+      slug: true,
+    },
+  });
+
+  const usedSlugs = new Set(existing.map((repo) => repo.slug));
+
+  if (!usedSlugs.has(baseSlug)) {
+    return baseSlug;
+  }
+
+  for (let index = 2; index < 10_000; index += 1) {
+    const candidate = `${baseSlug}-${index}`;
+
+    if (!usedSlugs.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error("Unable to generate a unique repository slug");
+}
+
+async function upsertTrackedRepository({
+  createdByEmail,
+  fullRepoName,
+  preferredSlug,
+}: {
+  createdByEmail: string;
+  fullRepoName: string;
+  preferredSlug?: string;
+}) {
+  const existingRepo = await db.query.repositories.findFirst({
+    where: eq(repositories.name, fullRepoName),
+  });
+
+  if (existingRepo) {
+    const nextSlug =
+      existingRepo.slug || (await getAvailableSlug(preferredSlug ?? fullRepoName));
+
+    await db
+      .update(repositories)
+      .set({
+        slug: nextSlug,
+        isTracked: true,
+        syncStatus:
+          existingRepo.syncStatus === REPO_SYNC_STATUS.ready
+            ? existingRepo.syncStatus
+            : REPO_SYNC_STATUS.pending,
+        lastSyncError: null,
+      })
+      .where(eq(repositories.id, existingRepo.id));
+
+    return {
+      repo: {
+        ...existingRepo,
+        slug: nextSlug,
+        isTracked: true,
+        syncStatus:
+          existingRepo.syncStatus === REPO_SYNC_STATUS.ready
+            ? existingRepo.syncStatus
+            : REPO_SYNC_STATUS.pending,
+        lastSyncError: null,
+      },
+      created: false,
+    };
+  }
+
+  const slug = await getAvailableSlug(preferredSlug ?? fullRepoName);
+  const trackedRepo = (
+    await db
+      .insert(repositories)
+      .values({
+        id: crypto.randomUUID(),
+        slug,
+        name: fullRepoName,
+        isTracked: true,
+        createdByEmail,
+        syncStatus: REPO_SYNC_STATUS.pending,
+      })
+      .returning()
+  )[0];
+
+  if (!trackedRepo) {
+    throw new Error("Unable to create tracked repository");
+  }
+
+  return {
+    repo: trackedRepo,
+    created: true,
+  };
+}
 
 export const appRouter = router({
   healthCheck: publicProcedure.query(() => {
@@ -124,55 +228,19 @@ export const appRouter = router({
       const repoOwner = input.repoOwner.trim();
       const repoName = input.repoName.trim();
       const fullRepoName = `${repoOwner}/${repoName}`;
-      const slug = slugifyRepoName(input.slug ?? repoName);
-
-      if (!slug) {
-        throw new Error("A valid slug is required");
-      }
-
-      const existingRepo = await db.query.repositories.findFirst({
-        where: eq(repositories.name, fullRepoName),
+      const { repo: trackedRepo } = await upsertTrackedRepository({
+        createdByEmail: ctx.session.user.email,
+        fullRepoName,
+        preferredSlug: input.slug ?? fullRepoName,
       });
-
-      const trackedRepo =
-        existingRepo ??
-        (
-          await db
-            .insert(repositories)
-            .values({
-              id: crypto.randomUUID(),
-              slug,
-              name: fullRepoName,
-              isTracked: true,
-              createdByEmail: ctx.session.user.email,
-              syncStatus: REPO_SYNC_STATUS.pending,
-            })
-            .returning()
-        )[0];
-
-      if (!trackedRepo) {
-        throw new Error("Unable to create tracked repository");
-      }
-
-      if (existingRepo) {
-        await db
-          .update(repositories)
-          .set({
-            isTracked: true,
-            syncStatus:
-              existingRepo.syncStatus === REPO_SYNC_STATUS.ready
-                ? existingRepo.syncStatus
-                : REPO_SYNC_STATUS.pending,
-            lastSyncError: null,
-          })
-          .where(eq(repositories.id, existingRepo.id));
-      }
 
       const shouldBackfill =
         trackedRepo.syncStatus !== REPO_SYNC_STATUS.ready ||
         !trackedRepo.lastSyncedAt;
+      const shouldEnableWebhook = !trackedRepo.webhookEnabledAt;
+      const shouldQueueSync = shouldBackfill || shouldEnableWebhook;
 
-      if (shouldBackfill) {
+      if (shouldQueueSync) {
         await appInngest.send({
           name: "repo/connected",
           data: {
@@ -188,6 +256,83 @@ export const appRouter = router({
         name: fullRepoName,
         syncStatus: shouldBackfill ? REPO_SYNC_STATUS.pending : trackedRepo.syncStatus,
         queuedBackfill: shouldBackfill,
+        queuedWebhookSetup: shouldEnableWebhook,
+      };
+    }),
+  githubAdminConnection: adminProcedure.query(async () => {
+    const connection = await getGitHubAdminConnection();
+
+    if (!connection) {
+      return {
+        connected: false,
+      };
+    }
+
+    return {
+      connected: true,
+      githubLogin: connection.githubLogin,
+      connectedByEmail: connection.connectedByEmail,
+      connectedAt: connection.updatedAt,
+      scope: connection.scope,
+    };
+  }),
+  listGitHubRepositories: adminProcedure.query(async () => {
+    const connection = await getGitHubAdminConnection();
+
+    if (!connection) {
+      return {
+        connected: false,
+        repositories: [],
+      };
+    }
+
+    return {
+      connected: true,
+      repositories: await listGitHubRepositoriesForAdmin(),
+    };
+  }),
+  connectGitHubRepositories: adminProcedure
+    .input(
+      z.object({
+        repositories: z.array(z.string().trim().min(1)).min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const connectedRepos = [];
+
+      for (const fullRepoName of input.repositories) {
+        const normalizedRepoName = fullRepoName.trim();
+        const { repo } = await upsertTrackedRepository({
+          createdByEmail: ctx.session.user.email,
+          fullRepoName: normalizedRepoName,
+          preferredSlug: normalizedRepoName,
+        });
+
+        const shouldBackfill =
+          repo.syncStatus !== REPO_SYNC_STATUS.ready ||
+          !repo.lastSyncedAt;
+        const shouldEnableWebhook = !repo.webhookEnabledAt;
+
+        if (shouldBackfill || shouldEnableWebhook) {
+          await appInngest.send({
+            name: "repo/connected",
+            data: {
+              repoId: repo.id,
+            },
+          });
+        }
+
+        connectedRepos.push({
+          slug: repo.slug,
+          name: normalizedRepoName,
+          queuedBackfill: shouldBackfill,
+          queuedWebhookSetup: shouldEnableWebhook,
+        });
+      }
+
+      return {
+        count: connectedRepos.length,
+        repositories: connectedRepos,
       };
     }),
   privateData: protectedProcedure.query(({ ctx }) => {

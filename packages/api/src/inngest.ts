@@ -4,6 +4,12 @@ import { commits, repositories } from "@gh-leaderboard/db/schema/github";
 import { Inngest } from "inngest";
 
 import {
+  ensureRepositoryWebhook,
+  getGitHubAdminAccessToken,
+  getWebhookSetupBlockReason,
+} from "./github-admin";
+import {
+  type NormalizedCommit,
   REPO_SYNC_STATUS,
   fetchRecentCommits,
   fetchRepositoryMetadata,
@@ -14,7 +20,7 @@ import {
 
 export const inngest = new Inngest({ id: "gh-leaderboard" });
 
-export const syncTrackedRepo = inngest.createFunction(
+export const syncTrackedRepo: ReturnType<typeof inngest.createFunction> = inngest.createFunction(
   {
     id: "sync-tracked-repo",
     triggers: [{ event: "repo/connected" }],
@@ -38,8 +44,12 @@ export const syncTrackedRepo = inngest.createFunction(
         return repo;
       });
 
+      const githubAccessToken = await step.run("load-github-admin-token", async () => {
+        return getGitHubAdminAccessToken();
+      });
+
       const metadata = await step.run("fetch-repository-metadata", async () => {
-        return fetchRepositoryMetadata(trackedRepo.name);
+        return fetchRepositoryMetadata(trackedRepo.name, githubAccessToken);
       });
 
       await step.run("persist-repository-metadata", async () => {
@@ -61,6 +71,24 @@ export const syncTrackedRepo = inngest.createFunction(
       });
 
       if (trackedRepo.syncStatus === REPO_SYNC_STATUS.ready && commitCount > 0) {
+        if (githubAccessToken) {
+          await step.run("enable-webhook-existing-repo", async () => {
+            const webhookResult = await ensureRepositoryWebhook(trackedRepo.name, githubAccessToken);
+
+            await markRepositorySyncState(trackedRepo.id, {
+              webhookEnabledAt: webhookResult.skipped ? null : new Date(),
+              lastSyncError: webhookResult.reason,
+            });
+          });
+        } else {
+          await step.run("record-missing-webhook-token-existing-repo", async () => {
+            await markRepositorySyncState(trackedRepo.id, {
+              webhookEnabledAt: null,
+              lastSyncError: getWebhookSetupBlockReason() ?? "Webhook setup skipped: connect a GitHub admin account first.",
+            });
+          });
+        }
+
         return {
           ok: true,
           skipped: true,
@@ -77,7 +105,7 @@ export const syncTrackedRepo = inngest.createFunction(
       });
 
       const recentCommits = await step.run("backfill-recent-commits", async () => {
-        return fetchRecentCommits(trackedRepo.name, metadata.defaultBranch, 100);
+        return fetchRecentCommits(trackedRepo.name, metadata.defaultBranch, 100, githubAccessToken);
       });
 
       await step.run("ingest-backfill-batch", async () => {
@@ -89,7 +117,7 @@ export const syncTrackedRepo = inngest.createFunction(
 
         await ingestCommitsForRepository({
           repository: freshRepo,
-          commits: recentCommits.map((commit) => ({
+          commits: recentCommits.map((commit: NormalizedCommit) => ({
             ...commit,
             timestamp: new Date(commit.timestamp),
           })),
@@ -110,6 +138,24 @@ export const syncTrackedRepo = inngest.createFunction(
           .where(eq(repositories.id, trackedRepo.id));
       });
 
+      if (githubAccessToken) {
+        await step.run("enable-webhook-after-backfill", async () => {
+          const webhookResult = await ensureRepositoryWebhook(trackedRepo.name, githubAccessToken);
+
+          await markRepositorySyncState(trackedRepo.id, {
+            webhookEnabledAt: webhookResult.skipped ? null : new Date(),
+            lastSyncError: webhookResult.reason,
+          });
+        });
+      } else {
+        await step.run("record-missing-webhook-token-after-backfill", async () => {
+          await markRepositorySyncState(trackedRepo.id, {
+            webhookEnabledAt: null,
+            lastSyncError: getWebhookSetupBlockReason() ?? "Webhook setup skipped: connect a GitHub admin account first.",
+          });
+        });
+      }
+
       return {
         ok: true,
         synced: recentCommits.length,
@@ -125,4 +171,4 @@ export const syncTrackedRepo = inngest.createFunction(
   },
 );
 
-export const inngestFunctions = [syncTrackedRepo];
+export const inngestFunctions: Array<ReturnType<typeof inngest.createFunction>> = [syncTrackedRepo];

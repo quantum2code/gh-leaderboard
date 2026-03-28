@@ -5,6 +5,20 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 
+function getTrustedOrigins() {
+  const origins = new Set<string>([env.BETTER_AUTH_URL]);
+
+  for (const origin of env.CORS_ORIGIN.split(",")) {
+    const normalizedOrigin = origin.trim();
+
+    if (normalizedOrigin.length > 0) {
+      origins.add(normalizedOrigin);
+    }
+  }
+
+  return Array.from(origins);
+}
+
 export function createAuth() {
   const db = createDb();
 
@@ -14,7 +28,7 @@ export function createAuth() {
 
       schema: schema,
     }),
-    trustedOrigins: [env.CORS_ORIGIN],
+    trustedOrigins: getTrustedOrigins(),
     emailAndPassword: {
       enabled: true,
     },
