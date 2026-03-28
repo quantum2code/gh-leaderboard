@@ -1,6 +1,10 @@
 import crypto from "crypto";
-import { db } from "@gh-leaderboard/db";
-import { githubCommits } from "@gh-leaderboard/db/schema/github";
+import {
+  enrichCommitsWithStats,
+  getTrackedRepositoryByNameIfTracked,
+  ingestCommitsForRepository,
+  normalizeWebhookCommits,
+} from "@gh-leaderboard/api/github-sync";
 import { env } from "@gh-leaderboard/env/server";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -16,17 +20,20 @@ function verifySignature(payload: string, signature: string | null) {
 }
 
 type PushPayload = {
+  ref?: string;
+  after?: string;
   repository?: {
     name?: string;
+    full_name?: string;
     owner?: {
       login?: string;
       name?: string;
     };
   };
   commits?: Array<{
-    id: string;
-    message: string;
-    timestamp: string;
+    id?: string;
+    message?: string;
+    timestamp?: string;
     author?: {
       name?: string;
       email?: string;
@@ -49,43 +56,34 @@ export async function POST(req: NextRequest) {
   }
 
   const payload = JSON.parse(rawBody) as PushPayload;
-  const repoName = payload.repository?.name;
-  const repoOwner =
-    payload.repository?.owner?.login ?? payload.repository?.owner?.name;
+  const repoName =
+    payload.repository?.full_name ??
+    (payload.repository?.name && payload.repository?.owner
+      ? `${payload.repository.owner.login ?? payload.repository.owner.name}/${payload.repository.name}`
+      : undefined);
 
-  if (
-    repoName !== env.GITHUB_REPO_NAME ||
-    repoOwner !== env.GITHUB_REPO_OWNER
-  ) {
+  if (!repoName) {
+    return NextResponse.json({ ok: true, ignored: true, reason: "Missing repository name" });
+  }
+
+  const trackedRepo = await getTrackedRepositoryByNameIfTracked(repoName);
+
+  if (!trackedRepo) {
     return NextResponse.json({
       ok: true,
       ignored: true,
-      reason: "Repository does not match configured leaderboard target",
+      reason: "Repository is not registered for tracking",
     });
   }
 
-  const commits = (payload.commits ?? [])
-    .filter((commit) => Boolean(commit.id && commit.timestamp))
-    .map((commit) => ({
-      id: crypto.randomUUID(),
-      repoOwner,
-      repoName,
-      commitSha: commit.id,
-      authorName: commit.author?.name ?? "Unknown author",
-      authorEmail: commit.author?.email ?? null,
-      authorUsername: commit.author?.username ?? null,
-      message: commit.message,
-      committedAt: new Date(commit.timestamp),
-    }));
+  const normalizedCommits = normalizeWebhookCommits(payload);
+  const enrichedCommits = await enrichCommitsWithStats(repoName, normalizedCommits);
 
-  if (commits.length === 0) {
-    return NextResponse.json({ ok: true, inserted: 0 });
-  }
+  const result = await ingestCommitsForRepository({
+    repository: trackedRepo,
+    commits: enrichedCommits,
+    lastCommitSha: payload.after ?? trackedRepo.lastCommitSha,
+  });
 
-  await db
-    .insert(githubCommits)
-    .values(commits)
-    .onConflictDoNothing({ target: githubCommits.commitSha });
-
-  return NextResponse.json({ ok: true, inserted: commits.length });
+  return NextResponse.json({ ok: true, inserted: result.seen });
 }
